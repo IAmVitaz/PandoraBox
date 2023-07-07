@@ -1,0 +1,53 @@
+name: Generate debug APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  apk:
+    name: Generate debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v1
+      
+      - name: Set up JDK 11
+        uses: actions/setup-java@v1
+        with:
+          java-version: '11'
+                  
+      - name: Generate apikey.properties
+        run: |
+          cat <<EOF > apikey.properties
+          DATADOG_LOGGER_NAME:"${{ vars.DATADOG_LOGGER_NAME }}"
+          DATADOG_CLIENT_TOKEN:"${{ secrets.DATADOG_CLIENT_TOKEN }}"
+          ZENDESK_URL:"${{ vars.ZENDESK_URL }}"
+          ZENDESK_APP_ID:"${{ secrets.ZENDESK_APP_ID }}"
+          ZENDESK_OAUTH_ID:"${{ secrets.ZENDESK_OAUTH_ID }}"
+          ZENDESK_CHAT_ACCOUNT_KEY:"${{ secrets.ZENDESK_CHAT_ACCOUNT_KEY }}"
+          EOF
+          
+      - name: Generate file name env var
+        run: |
+          VERSION_NAME=$(${{github.workspace}}/gradlew -q printVersionName)
+          DATE=$(date +'%d.%m.%Y')
+          BRANCH_NAME=${GITHUB_REF##*/}
+          MESSAGE=$(cat << EOF
+          AppName-debug-${VERSION_NAME}-${BRANCH_NAME}-${DATE}
+          EOF
+          )
+          echo OUTPUT_NAME=$MESSAGE >> $GITHUB_ENV
+
+      - name: Build debug APK
+        run: bash ./gradlew assembleDebug --stacktrace
+
+      - name: Rename APK 
+        run:
+          mv "./app/build/outputs/apk/debug/app-debug.apk" "./app/build/outputs/apk/debug/${{ env.OUTPUT_NAME }}.apk"
+        
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v1
+        with:
+          name: ${{ env.OUTPUT_NAME }}
+          path: app/build/outputs/apk/debug/${{ env.OUTPUT_NAME }}.apk
